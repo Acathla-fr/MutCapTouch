@@ -1,0 +1,13 @@
+diff --git a/litex/soc/software/bios/main.c b/litex/soc/software/bios/main.c
+index b00a6920c..972708d91 100644
+--- a/litex/soc/software/bios/main.c
++++ b/litex/soc/software/bios/main.c
+@@ -218,7 +218,7 @@ __attribute__((__used__)) int main(int i, char **c)
+ 
+        /* Initialize and test SPIFLASH */
+ #ifdef CSR_SPIFLASH_BASE
+-       spiflash_init();
++       //spiflash_init();
+ #endif
+        printf("\n");
+

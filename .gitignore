@@ -1,0 +1,11 @@
+__pycache__
+*.d
+*.o
+*.a
+*.bin
+*~
+build*
+*.vcd
+*.swp
+*.json
+
