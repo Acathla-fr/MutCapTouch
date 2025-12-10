@@ -6,6 +6,7 @@ from migen.fhdl.specials import Tristate
 from migen.genlib.fifo import SyncFIFO
 
 from litex.soc.interconnect.csr import *
+from litex.soc.interconnect.csr_eventmanager import *
 from litex.soc.interconnect import *
 from litex.soc.cores.gpio import GPIOOut, GPIOTristate
 
@@ -57,6 +58,10 @@ class CapTouch(Module, AutoCSR):
         self.fifo = fifo = stream.SyncFIFO([("data", dw)], fifo_depth, buffered=True)
         self.submodules += fifo
 
+        self.submodules.ev = EventManager()
+        self.ev.captouch_done = EventSourceProcess() #edge="rising")
+        self.ev.finalize()
+
         ###
 
         # FIFO module -> CPU
@@ -66,11 +71,13 @@ class CapTouch(Module, AutoCSR):
         self.comb += [
             # FIFO --> CSR.
             self.capdata.w.eq(fifo.source.data),
-            #fifo.source.ready.eq(self.ev.data.clear),
+            fifo.source.ready.eq(self.ev.captouch_done.clear | self.capdata.we),
             # Status.
             self._fifo.status.eq(~fifo.source.valid),
             #self.ctrl.fields.fifo_empty.eq(~fifo.source.valid),
             #self.ctrl.fields.fifo_full.eq(~fifo.sink.ready),
+            # IRQ (When FIFO becomes non-empty).
+            self.ev.captouch_done.trigger.eq(~fifo.source.valid)
         ]
 
 #        self.sync += [
@@ -78,7 +85,8 @@ class CapTouch(Module, AutoCSR):
 #                   counter.eq(counter+1)) ]
 
         self.fsm.act("IDLE",
-            If(self.ctrl.fields.start == True,
+            #If(self.ctrl.fields.start != 0,
+            If(self.ctrl.storage==True,
                 NextState("RUN")),
             # All lines set to zero and columns to one
             self.lines_oe.eq(2**num_lines - 1),
@@ -86,7 +94,7 @@ class CapTouch(Module, AutoCSR):
             self.cols_oe.eq(2**num_cols - 1),
             self.cols_o.eq(2**num_cols - 1),
             NextValue(counter, 0),
-            NextValue(self.ctrl.fields.start, 0),  # Reset the register because the pulse parameter does not do what you think it should do
+            #NextValue(self.ctrl.fields.start, 0),  # Reset the register because the pulse parameter does not do what you think it should do
         )
 
         self.fsm.act("RUN",
@@ -112,12 +120,14 @@ class CapTouch(Module, AutoCSR):
 
         self.fsm.act("SAVE",
             # "Serialization" (fill the FIFO)
+            NextValue(fifo.sink.data, 0xDEADBEEF+self.loop_id),
             #NextValue(fifo.sink.data, 0xDEADBEEF),
-            NextValue(fifo.sink.data, buf[self.loop_id]),
+            #NextValue(fifo.sink.data, buf[self.loop_id]),
             NextValue(self.loop_id, self.loop_id+1),
             NextValue(fifo.sink.valid, 1),
             If(self.loop_id == num_lines-1,
                 NextState("IDLE"),
+                NextValue(self.ctrl.storage, 0),
                 NextValue(self.loop_id, 0),
                 #NextValue(self.ctrl.fields.start, 0),  # Reset the register because the pulse parameter does not do what you think it should do
             ).Else(
