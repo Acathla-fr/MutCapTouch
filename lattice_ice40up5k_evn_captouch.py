@@ -121,8 +121,8 @@ class BaseSoC(SoCCore):
           ("y", 3, Pins("J2:8"), IOStandard("LVCMOS33")),
         ]
         self.platform.add_extension(_GPIOs)
-        rx = self.platform.request("x", 0)
-        tx = self.platform.request("y", 0)
+        rx_pads = self.platform.request("x")
+        tx_pads = self.platform.request("y")
 
         # Module Instanciation
         from mutcaptouch import CapTouch
@@ -131,9 +131,9 @@ class BaseSoC(SoCCore):
 
         # Tristate pins (cannot be simulated)
         _l = TSTriple(n)
-        self.specials += _l.get_tristate(self.captouch.lines_pads)
+        self.specials += _l.get_tristate(rx_pads)
         _c = TSTriple(m)
-        self.specials += _c.get_tristate(self.captouch.cols_pads)
+        self.specials += _c.get_tristate(tx_pads)
         _l.oe.eq(self.captouch.lines_oe)
         _l.o.eq(self.captouch.lines_o)
         _l.i.eq(self.captouch.lines_i)

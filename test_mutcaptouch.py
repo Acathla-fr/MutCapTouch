@@ -42,15 +42,21 @@ def testbench(e):
         yield                               # yield a clock tick even if no line changed state
       yield
       yield
-      while ( yield e.loop_id == (len(y_pads)-1) ):
+      while ( yield e.loop_id == len(y_pads)-1 ):
           yield
       for i in range(len(x_pads)):
           #yield e.source.data
           yield from e.capdata.read()
-      yield
+      
+      while ( yield e.ev.captouch_done.pending == 0):
+          yield
+      yield e.ev.captouch_done.clear.eq(1)
+      yield e.ev.captouch_done.clear.eq(0)
       for i in range(len(x_pads)):
           yield e.lines_i[i].eq(0)  # Put back lines at 0, not sure it's usefull
       yield
+      for i in range(42):
+          yield
 
 def test_captouch():
     dut=CapTouch(4,4)

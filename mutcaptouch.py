@@ -25,9 +25,9 @@ class CapTouch(Module, AutoCSR):
         buf = Array(Signal(dw) for a in range(num_lines))
 
         # Lines
-        self.lines_pads = Signal(num_lines)
+        #self.lines_pads = Signal(num_lines)
         # Columns
-        self.cols_pads = Signal(num_cols)
+        #self.cols_pads = Signal(num_cols)
         # OutputEnable
         self.oe = Signal(num_cols)
         
@@ -42,14 +42,14 @@ class CapTouch(Module, AutoCSR):
         # CSR
         fields = [
           CSRField("start", size=1, pulse=True, description="Start the measurement"),
-          CSRField("fifo_empty", size=1, description="FIFO empty if 1"),
-          CSRField("fifo_full", size=1, description="FIFO full if 1"),
+          CSRField("fifo_empty", size=1, description="FIFO empty if at 1"),
+          CSRField("fifo_full", size=1, description="FIFO full if at 1"),
         ]
 
         self.capdata = CSR(dw)
 
-        #self.ctrl = CSRStorage(32, fields=fields)
-        self._fifo  = CSRStatus()
+        self._fifo  = CSRStatus(3, fields=fields)
+        #self.ctrl = CSRStatus(32, fields=fields)
         self.ctrl = CSRStorage(1, reset_less=True,
             fields=[CSRField("start", size=1, pulse=True, description="*Field*: bit", values=[
                 ("1", "ENABLED", "Starts the capture")]),
@@ -71,11 +71,12 @@ class CapTouch(Module, AutoCSR):
         self.comb += [
             # FIFO --> CSR.
             self.capdata.w.eq(fifo.source.data),
+            # capdata.we used to get 1 value out of the FIFO automatically after each read from the bus
             fifo.source.ready.eq(self.ev.captouch_done.clear | self.capdata.we),
             # Status.
-            self._fifo.status.eq(~fifo.source.valid),
-            #self.ctrl.fields.fifo_empty.eq(~fifo.source.valid),
-            #self.ctrl.fields.fifo_full.eq(~fifo.sink.ready),
+            #self._fifo.status.eq(~fifo.source.valid),
+            self._fifo.fields.fifo_empty.eq(~fifo.source.valid),
+            self._fifo.fields.fifo_full.eq(~fifo.sink.ready),
             # IRQ (When FIFO becomes non-empty).
             self.ev.captouch_done.trigger.eq(~fifo.source.valid)
         ]
@@ -120,12 +121,12 @@ class CapTouch(Module, AutoCSR):
 
         self.fsm.act("SAVE",
             # "Serialization" (fill the FIFO)
-            NextValue(fifo.sink.data, 0xDEADBEEF+self.loop_id),
+            NextValue(fifo.sink.data, 0xDEAD0000 +self.loop_id),
             #NextValue(fifo.sink.data, 0xDEADBEEF),
             #NextValue(fifo.sink.data, buf[self.loop_id]),
             NextValue(self.loop_id, self.loop_id+1),
             NextValue(fifo.sink.valid, 1),
-            If(self.loop_id == num_lines-1,
+            If(self.loop_id == num_lines - 1,
                 NextState("IDLE"),
                 NextValue(self.ctrl.storage, 0),
                 NextValue(self.loop_id, 0),
