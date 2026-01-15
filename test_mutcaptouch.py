@@ -17,17 +17,9 @@ max_delay = 16
 
 def testbench(e):
   yield
-  #yield e.reg_ctrl.fields.start.eq(1)
-  #while ( yield e.source.valid) == 0:
-  #  yield
-  #while ( yield e.lines_oe) == 1: # Wait for the start of a cycle
-  #  yield
   delay = [0] * len(x_pads)     # Create an empty array of size "len(x_pads)"
 
   for n in range(10):       # n captures
-      #yield e.trig.eq(1)    # Start a cycle
-      #yield
-      #yield e.trig.eq(0)
       yield from e.ctrl.write(1)
       yield
 
@@ -35,27 +27,31 @@ def testbench(e):
           delay[i] = randrange(1,max_delay)  # Wait for a random number of cycles to simulate capture
                                     # Each entry of delay[] is the time to wait before a line to go up,
                                     # simulating a touch (or noise)
-      for i in range(max_delay-1):
+      for i in range(max_delay):
         for j in range(len(x_pads)):
             if( delay[j] == i ):
                 yield e.lines_i[j].eq(1)    # Put line number j up
+                print("Line ",j," up at tick ",i)
         yield                               # yield a clock tick even if no line changed state
-      yield
-      yield
-      while ( yield e.loop_id == len(y_pads)-1 ):
-          yield
+
+      yield                         # Wait for 
+      yield                         # FIFO to be filled
+      while ( yield e.ev.captouch_done.status ) == 0  : # Wait for FIFO to be fully filled
+        yield
+
+      #yield from e.capdata.read()   # BUG?
       for i in range(len(x_pads)):
           #yield e.source.data
-          yield from e.capdata.read()
-      
-      while ( yield e.ev.captouch_done.pending == 0):
+          data = yield from e.capdata.read()
           yield
-      yield e.ev.captouch_done.clear.eq(1)
-      yield e.ev.captouch_done.clear.eq(0)
+          print("Data received: ", data, "index : ", i)
+      
+      while ( yield e.status.fields.fifo_empty == 0):
+          yield
       for i in range(len(x_pads)):
-          yield e.lines_i[i].eq(0)  # Put back lines at 0, not sure it's usefull
+          yield e.lines_i[i].eq(0)  # Put back lines at 0, needed for simulation
       yield
-      for i in range(42):
+      for i in range(12):
           yield
 
 def test_captouch():

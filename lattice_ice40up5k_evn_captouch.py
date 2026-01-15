@@ -23,7 +23,7 @@ from litex.soc.integration.soc import SoCRegion
 from litex.soc.integration.builder import *
 from litex.soc.cores.led import LedChaser
 
-from litex.build.generic_platform import Pins, IOStandard
+from litex.build.generic_platform import *
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -68,6 +68,10 @@ class BaseSoC(SoCCore):
         kwargs["integrated_sram_size"] = 0
         kwargs["integrated_rom_size"]  = 0
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteX SoC on Lattice iCE40UP5k EVN breakout board", **kwargs)
+       # CPU --------------------------------------------------------------------------------------
+
+        if (self.cpu_type == "vexriscv") and (self.cpu_variant == "lite"):
+            self.cpu.use_external_variant("rtl/VexRiscv_Lite.v")
 
         # 128KB SPRAM (used as SRAM) ---------------------------------------------------------------
         self.spram = Up5kSPRAM(size=128 * KILOBYTE)
@@ -110,19 +114,32 @@ class BaseSoC(SoCCore):
 
         # Captouch ---------------------------------------------------------------------------------
         # Pin distribution
+        #_GPIOs = [
+        #  ("pads_x", 0,
+        #   Subsignal("0", Pins("J2:0"), IOStandard("LVCMOS33")),
+        #   Subsignal("1", Pins("J2:1"), IOStandard("LVCMOS33")),
+        #   Subsignal("2", Pins("J2:3"), IOStandard("LVCMOS33")),
+        #   Subsignal("3", Pins("J2:4"), IOStandard("LVCMOS33")),
+        #  ),
+        #  ("pads_y", 0,
+        #   Subsignal("0", Pins("J2:5"), IOStandard("LVCMOS33")),
+        #   Subsignal("1", Pins("J2:6"), IOStandard("LVCMOS33")),
+        #   Subsignal("2", Pins("J2:7"), IOStandard("LVCMOS33")),
+        #   Subsignal("3", Pins("J2:8"), IOStandard("LVCMOS33")),
+        #  )
+        #]
         _GPIOs = [
-          ("x", 0, Pins("J2:0"), IOStandard("LVCMOS33")),
-          ("x", 1, Pins("J2:1"), IOStandard("LVCMOS33")),
-          ("x", 2, Pins("J2:3"), IOStandard("LVCMOS33")),
-          ("x", 3, Pins("J2:4"), IOStandard("LVCMOS33")),
-          ("y", 0, Pins("J2:5"), IOStandard("LVCMOS33")),
-          ("y", 1, Pins("J2:6"), IOStandard("LVCMOS33")),
-          ("y", 2, Pins("J2:7"), IOStandard("LVCMOS33")),
-          ("y", 3, Pins("J2:8"), IOStandard("LVCMOS33")),
+          ("pads_x", 0, Pins("J2:0"), IOStandard("LVCMOS33")),
+          ("pads_x", 1, Pins("J2:1"), IOStandard("LVCMOS33")),
+          ("pads_x", 2, Pins("J2:3"), IOStandard("LVCMOS33")),
+          ("pads_x", 3, Pins("J2:4"), IOStandard("LVCMOS33")),
+
+          ("pads_y", 0, Pins("J2:5"), IOStandard("LVCMOS33")),
+          ("pads_y", 1, Pins("J2:6"), IOStandard("LVCMOS33")),
+          ("pads_y", 2, Pins("J2:7"), IOStandard("LVCMOS33")),
+          ("pads_y", 3, Pins("J2:8"), IOStandard("LVCMOS33")),
         ]
         self.platform.add_extension(_GPIOs)
-        rx_pads = self.platform.request("x")
-        tx_pads = self.platform.request("y")
 
         # Module Instanciation
         from mutcaptouch import CapTouch
@@ -130,16 +147,26 @@ class BaseSoC(SoCCore):
         self.submodules.captouch = CapTouch(n,m)
 
         # Tristate pins (cannot be simulated)
-        _l = TSTriple(n)
-        self.specials += _l.get_tristate(rx_pads)
-        _c = TSTriple(m)
-        self.specials += _c.get_tristate(tx_pads)
-        _l.oe.eq(self.captouch.lines_oe)
-        _l.o.eq(self.captouch.lines_o)
-        _l.i.eq(self.captouch.lines_i)
-        _c.oe.eq(self.captouch.cols_oe)
-        _c.o.eq(self.captouch.cols_o)
-        _c.i.eq(self.captouch.cols_i)
+        _l = [] # TSTriple()
+        for index in range(n):
+            _l.append(TSTriple())
+            pad=self.platform.request("pads_x")
+            self.specials += _l[index].get_tristate(pad)
+            _l[index].oe.eq(self.captouch.lines_oe[index])
+            _l[index].o.eq(self.captouch.lines_o[index])
+            _l[index].i.eq(self.captouch.lines_i[index])
+        _c = [] # TSTriple()
+        for index in range(m):
+            _c.append(TSTriple())
+            pad=self.platform.request("pads_y")
+            self.specials += _c[index].get_tristate(pad)
+            _c[index].oe.eq(self.captouch.cols_oe[index])
+            _c[index].o.eq(self.captouch.cols_o[index])
+            _c[index].i.eq(self.captouch.cols_i[index])
+
+        if not ( (self.cpu_type == "serv") | (self.cpu_type == None)):    # Add IRQs
+            self.irq.add("captouch", use_loc_if_exists=True)
+
 
 
 # Flash --------------------------------------------------------------------------------------------
@@ -148,7 +175,8 @@ def flash(bios_flash_offset, target="lattice_ice40up5k_evn"):
     from litex.build.dfu import DFUProg
     prog = IceStormProgrammer()
     bitstream  = open("build/"+target+"/gateware/"+target+".bin",  "rb")
-    bios       = open("build/"+target+"/software/bios/bios.bin", "rb")
+    #bios       = open("build/"+target+"/software/bios/bios.bin", "rb")
+    bios       = open("app.bin", "rb")
     image      = open("build/"+target+"/image.bin", "wb")
     # Copy bitstream at 0x00000000
     for i in range(0x00000000, 0x00020000):
