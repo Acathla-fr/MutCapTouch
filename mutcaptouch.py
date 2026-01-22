@@ -15,7 +15,7 @@ class CapTouch(Module, AutoCSR):
     def __init__(self, num_lines, num_cols):
         dw=32   # To be adjusted to the max time a capture can last
         timeout=12**6   # Timeout (number of cycles to wait max, dependent on freq)
-        timeout=42   # Timeout (number of cycles to wait max, dependent on freq)
+        #timeout=42   # Timeout (number of cycles to wait max, dependent on freq)
         fifo_depth=num_lines
         #fifo_depth=num_lines*num_cols
         #self.source = stream.Endpoint([("data", dw)])
@@ -67,7 +67,7 @@ class CapTouch(Module, AutoCSR):
 
         # IRQ
         self.submodules.ev = EventManager()
-        self.ev.captouch_done = EventSourceProcess() #edge="rising")
+        self.ev.captouch_done = EventSourceProcess(edge="rising")
         self.ev.finalize()
 
         ###
@@ -80,13 +80,14 @@ class CapTouch(Module, AutoCSR):
             # FIFO --> CSR.
             self.capdata.w.eq(fifo.source.data),
             # capdata.we == 1 : one value out of the FIFO automatically after each read from the bus
-            fifo.source.ready.eq(self.capdata.we),
+            #fifo.source.ready.eq(self.capdata.we),
+            If(self.capdata.we, fifo.source.ready.eq(1)),
             #fifo.source.ready.eq(self.ev.captouch_done.clear | self.capdata.we),
             # Status.
             self.status.fields.fifo_empty.eq(~fifo.source.valid),
             self.status.fields.fifo_full.eq(~fifo.sink.ready),
             # IRQ (When FIFO becomes non-empty).
-            #self.ev.captouch_done.trigger.eq(~fifo.source.valid)
+            self.ev.captouch_done.trigger.eq(fifo.source.valid)
         ]
 
 
@@ -112,6 +113,10 @@ class CapTouch(Module, AutoCSR):
             ),
             # Or timeout
             If( counter == timeout, #(2**dw-1),
+                NextValue(buf[0], self.lines_i[0]), #DEBUG
+                NextValue(buf[1], self.lines_i[1]), #DEBUG
+                NextValue(buf[2], self.lines_i[2]), #DEBUG
+                NextValue(buf[3], self.lines_i[3]), #DEBUG
                 NextState("SAVE")
             ).Else(
                 NextValue(counter, counter + 1),
@@ -145,7 +150,7 @@ class CapTouch(Module, AutoCSR):
         self.fsm.act("WAIT",
             NextValue(fifo.sink.valid, 0),
 
-            NextValue(self.ev.captouch_done.trigger, 1),    # IRQ (When capture is done and FIFO filled)
+            #NextValue(self.ev.captouch_done.trigger, 1),    # IRQ (When capture is done and FIFO filled)
             NextValue(self.ctrl.storage, 0),
             NextState("IDLE"),
         )

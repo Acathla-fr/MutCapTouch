@@ -10,6 +10,7 @@
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import MultiReg
 
 from litex.gen import *
 
@@ -152,17 +153,17 @@ class BaseSoC(SoCCore):
             _l.append(TSTriple())
             pad=self.platform.request("pads_x")
             self.specials += _l[index].get_tristate(pad)
-            _l[index].oe.eq(self.captouch.lines_oe[index])
-            _l[index].o.eq(self.captouch.lines_o[index])
-            _l[index].i.eq(self.captouch.lines_i[index])
+            self.comb += _l[index].oe.eq(self.captouch.lines_oe[index])
+            self.comb += _l[index].o.eq(self.captouch.lines_o[index])
+            self.specials += MultiReg(_l[index].i, self.captouch.lines_i[index])
         _c = [] # TSTriple()
         for index in range(m):
             _c.append(TSTriple())
             pad=self.platform.request("pads_y")
             self.specials += _c[index].get_tristate(pad)
-            _c[index].oe.eq(self.captouch.cols_oe[index])
-            _c[index].o.eq(self.captouch.cols_o[index])
-            _c[index].i.eq(self.captouch.cols_i[index])
+            self.comb += _c[index].oe.eq(self.captouch.cols_oe[index])
+            self.comb += _c[index].o.eq(self.captouch.cols_o[index])
+            self.specials += MultiReg(_c[index].i, self.captouch.cols_i[index])
 
         if not ( (self.cpu_type == "serv") | (self.cpu_type == None)):    # Add IRQs
             self.irq.add("captouch", use_loc_if_exists=True)

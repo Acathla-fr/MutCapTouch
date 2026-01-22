@@ -208,9 +208,9 @@ int main(void)
 #ifdef CONFIG_CPU_HAS_INTERRUPT
 	irq_setmask(0);
 	irq_setie(1);
-    hmc_init();
 #endif
 	uart_init();
+    hmc_init();
 
 	help();
 	prompt();
